@@ -1,0 +1,301 @@
+---
+title: "Data Visualization - Mini-Project 1"
+author: "Levi C. Nicklas `lnicklas8181@floridapoly.edu`"
+output: html_notebook
+---
+
+
+```{r setup, include = F}
+library(tidyverse)
+library(tidytext)
+library(igraph)
+library(ggraph)
+library(ggimage)
+library(grid)
+library(png)
+library(patchwork)
+library(ggannotate)
+
+# Data
+federalist <- read_rds("../data/tidy_federalist.RDS")
+
+# Extras
+parchment <- "../images/parchment.png"
+ham_sig <- png::readPNG("../images/AHam.png")
+mad_sig <- png::readPNG("../images/JamesMadison.png")
+jj_sig <- png::readPNG("../images/jj_sig.png")
+```
+
+
+
+# Introduction
+
+The federalist papers were written by three men: Alexander Hamilton, James Madison, and John Jay. These men wrote 85 essays to encourage the public to support the new U.S. constitution when it was not certain what would become of our new union. The essays discuss a variety of topics ranging from taxation to the role of the president. These essays helped the public understand the purpose of the constitution, what the fight was for, and what our new nation's government would look like. 
+
+A ~~perfect historically accurate~~ depiction of the events can be seen [here](https://youtu.be/DpCeJkTB1_Q?t=254).
+![](http://resident.com/new/wp-content/uploads/2016/04/hamilton.jpg)
+
+In this analysis of the Federalist essays, obtained from `{gutenbergr}`, I will explore the differences between the 3 authors. Exploration will be done through use of data summaries and data visualizations. Additionally, I will be tying in concepts from my thesis topic. 
+
+_Data injection and intial formatiing can be viewed in the `scripts` file, or in Appendix A._
+
+
+# Data Reformat
+Before we can do anything interesting with this data, it requires additional processing. This data is currently in the format of:
+
+Paper No. | Text | Author
+----------|------|-------
+1 | ... | Hamilton
+2 | ... | Jay
+
+Where the "..." is the entire text for the essay. All of the analysis I would like to complete utilizes **tokens**. Tokens could also be called a "unit of text"; tokens may be paragraphs, sentences, *bigrams*, **words**, or even characters. I will be focusing on _bigrams_ and _words_. Specifically I will be examining **skip bigrams**, where a bigram is produced if words fall within a specified window of each other. Lucky for me, the `{tidytext}` package has tokenizers for both words and skip bigrams. But before we get too deep into the analysis, we should summarize the data.
+
+# Data Summary
+
+As stated earlier, there are 85 total essays written by these three men (if you watch the _Hamilton_ clip you will know how many each man wrote). We may want to check out how many words are in each essay. We can do this with `{tidytext}`, `{ggplot2}`, and `{dplyr}`. In the below plot, Figure 1, we see that essay lengths ranged from 988 words to 5870 words! I highlighted what must have been of more importance in their minds at the time, versus what may be more concerning to us today; much more was written on _Trial by Jury_ than was on _Electing a President_. 
+
+```{r words-per-doc, message = F}
+p <- federalist %>% 
+  unnest_tokens(input = text, output = "word", token = "words") %>% 
+  #anti_join(stop_words) %>% 
+  group_by(paper_num) %>% 
+  count() %>% 
+  ggplot(aes(paper_num,n)) +
+  #geom_bgimage(parchment) +
+  geom_col(fill = "black", alpha = 0.75) +
+  geom_curve(data = data.frame(x = 82.1789757789767, y = 5952.69503878185, 
+                               xend = 63.5089761463646, yend = 5483.11777828242),
+             mapping = aes(x = x, y = y, xend = xend, yend = yend),
+             curvature = 0.305, arrow = arrow(30L, unit(0.1, "inches"),"last", "closed"),
+             alpha = 1, inherit.aes = FALSE) +
+  geom_curve(data = data.frame(x = 68.6950871554235, y = 3092.81934190705, 
+                               xend = 59.0637381385998, yend = 3915.33373479995), 
+             mapping = aes(x = x, y = y, xend = xend, yend = yend), 
+             arrow = arrow(30L, unit(0.1, "inches"), "last", "closed"), 
+             alpha = 1, inherit.aes = FALSE) +
+  geom_text(data = data.frame(x = 47.9506431191878, y = 3872.04350359506, label = "Topic: Electing a President"),
+            mapping = aes(x = x, y = y, label = label),
+            size = 3.86605783866058, hjust = 0.6, alpha = 1, inherit.aes = FALSE) +
+  geom_text(data = data.frame(x = 58.6192143378233, y = 5495.42717377841, label = "Topic: Trial by Jury"),
+            mapping = aes(x = x, y = y, label = label),
+            size = 3.86605783866058, hjust = 0.75, alpha = 1, inherit.aes = FALSE) +
+  ggthemes::theme_clean() +
+  theme(plot.background = element_rect(fill = "#E0C594")) +
+  labs(title = "Federalist Papers", subtitle = "Figure 1",
+       x = "Essay No.", y = "Number of Words")
+
+p
+
+#ggannotate::ggannotate(p)
+```
+
+```{r data-summary, message = F}
+federalist %>% 
+  unnest_tokens(input = text, output = "word", token = "words") %>% 
+  group_by(author, paper_num) %>% 
+  count() %>% 
+  ungroup() %>% 
+  group_by(author) %>% 
+  summarize(mean = mean(n),
+            median = median(n),
+            max = max(n),
+            min = min(n))
+```
+
+Although the men worked together and shared ideas, Hamilton wrote the most. Let's examine. In Figures 2 & 3, we see that Hamilton certainly wrote the most, but Madison often wrote more lengthy essays. Maybe Jay just was tired of writing? Just kidding, read more about why he didn't write so much [here](https://www.history.com/topics/early-us/federalist-papers) (spoilers: he got very sick). 
+
+```{r author-exploration}
+# Boxplot
+p_a <- federalist %>% 
+  unnest_tokens(input = text, output = "word", token = "words") %>% 
+  group_by(author, paper_num) %>% 
+  count() %>% 
+  ungroup() %>% 
+  group_by(author) %>% 
+  ggplot(aes(x = author, y = n))+
+  geom_boxplot(fill = NA) +
+  geom_jitter(shape = 4, alpha = 0.5)+
+  ggthemes::theme_clean() +
+  theme(plot.background = element_rect(fill = "#E0C594")) +
+  labs(title = "Essays by Author", subtitle = "Figure 2",
+       x = "Author", y = "Number of Words")
+
+# Stacked Bar
+p_b <- federalist %>% 
+  unnest_tokens(input = text, output = "word", token = "words") %>% 
+  group_by(author, paper_num) %>% 
+  count() %>% 
+  ungroup() %>% 
+  group_by(author) %>% 
+  ggplot(aes(x = author, y = n, grouping = paper_num))+
+  geom_col(color = "black", alpha = 0.5) +
+  ggthemes::theme_clean() +
+  theme(plot.background = element_rect(fill = "#E0C594")) +
+  labs(title = "Amount Written by Author", subtitle = "Figure 3",
+       x = "Author", y = "Number of Words")
+
+
+p_a + p_b
+
+```
+
+So Jay didn't write a lot (sorry Jay), Madison was working hard, and Hamilton was writing [Non-Stop](https://www.youtube.com/watch?v=q9iLfPP4Ps8), but what were they writing about? Doesn't subject matter and quality over quantity? We can explore content in the next section.
+
+# Data Analysis
+## TF-IDF
+
+First, we can use the ever reliable **Term Frequency-Inverse Document Frequency**. This calculation can be intuitively described as _how important a word is to a corpus_. For our purposes, this may be how important a word is the the writings of Madison or Hamilton. Unlike when we were just assessing the sheer number of words the authors wrote, now we are concerned with content. So, at this phase we will remove **stop words**
+
+```{r tf_idf1, message = F}
+library(RColorBrewer)
+
+
+set.seed(23)
+
+federalist_tf_idf <- federalist %>% 
+  unnest_tokens(input = text, output = "word", token = "words") %>% 
+  anti_join(stop_words) %>% 
+  group_by(author, word) %>% 
+  count() %>% 
+  bind_tf_idf(word,author,n) 
+
+p1 <- federalist_tf_idf %>% 
+  group_by(author) %>% 
+  slice_max(order_by = tf_idf, n = 10) %>% 
+  filter(author == "HAMILTON") %>% 
+  mutate(word = fct_reorder(word, tf_idf)) %>%
+  ggplot(aes(word, tf_idf))+
+  geom_bgimage(parchment)+
+  annotation_custom(rasterGrob(ham_sig))+
+  geom_col(fill = "black", color = "black", alpha = 0.5, size = 0.25)+
+  coord_flip()+
+  ggthemes::theme_clean() +
+  theme(plot.background = element_rect(fill = "#E0C594"))
+```
+
+```{r tf_idf2, message=F}
+p2 <- federalist_tf_idf %>% 
+  group_by(author) %>% 
+  slice_max(order_by = tf_idf, n = 10) %>% 
+  filter(author == "MADISON") %>% 
+  mutate(word = fct_reorder(word, tf_idf)) %>%
+  ggplot(aes(word, tf_idf))+
+  geom_bgimage(parchment)+
+  annotation_custom(rasterGrob(mad_sig))+
+  geom_col(fill = "black", color = "black", alpha = 0.5, size = 0.25)+
+  coord_flip()+
+  ggthemes::theme_clean() +
+  theme(plot.background = element_rect(fill = "#E0C594"))
+
+```
+
+```{r tf_idf3, message = F}
+p3 <- federalist_tf_idf %>% 
+  group_by(author) %>% 
+  slice_max(order_by = tf_idf, n = 10) %>% 
+  filter(author == "JAY") %>% 
+  mutate(word = fct_reorder(word, tf_idf)) %>%
+  ggplot(aes(word, tf_idf))+
+  geom_bgimage(parchment)+
+  annotation_custom(rasterGrob(jj_sig))+
+  geom_col(fill = "black", color = "black", alpha = 0.5, size = 0.25)+
+  coord_flip()+
+  ggthemes::theme_clean() +
+  theme(plot.background = element_rect(fill = "#E0C594"))
+```
+
+```{r combine_tf_idf}
+p1 / p2 / p3
+```
+
+Through looking at the `tf_idf` values for each author, we see that:
+
+- Hamilton: Jury, Spirit, Extent, Objection
+
+- Madison: Representatives, Legislative, Republican, Branch
+
+- Jay: America, Obeyed, Tides, Steadily
+
+One of the words that really popped out to me here was "tides" from Jay, who must have used a lot of ocean analogies in his writing, perhaps? Additionally, that really long paper in Figure 1 which dicussed _Trial by Jury_, Hamilton wrote that, so it only makes sense that this is his defining word. Madison wrote a lot on congress (House of Representatives and the Senate). He described this new _mixed government_ and that required a lot of writing on how exactly the congress would work. This is visible in the words "Representatives", "Legislative", and "Republican" (republican in this context meaning a republic, where the governed are represented by elected officials). 
+
+I did mention we would want to look at bigrams in addition to words. Let's check them out.
+
+## Skip Bigrams
+
+As stated, for my thesis I will be writing on a tecnique that uses _skip bigram_ graphs to measure document similarity. Again, the folks that wrote `{tidytext}` have packaged a difficult task into a few lines of code. With `{tidytext}` we con construct skip bigrams. There is a fair amount of work that needs to be done before we can just view these graphs: reformating data, cleaning data, etc. In this paper, we will only consider skip bigrams with a window width of 5 ($k=5$).
+
+Let's look at an initial graph visualization.
+
+```{r reformat-1}
+federalist_skip_bigram <- tidytext::unnest_tokens(federalist, output = "words" ,input = text, token = "skip_ngrams", n = 2, k = 5)
+```
+
+```{r reformat-2, error = F, warning = F, message = F}
+federalist_skip_bigram <- federalist_skip_bigram %>% 
+  separate(words, c("word1", "word2"), sep = " ") %>% 
+  anti_join(stop_words, by = c("word1" = "word")) %>% 
+  anti_join(stop_words, by = c("word2" = "word")) %>% 
+  filter(!is.na(word1),
+         !is.na(word2))
+```
+
+```{r visual2}
+fed_skip_bigram_graph <- federalist_skip_bigram %>% 
+  filter(author == "HAMILTON") %>% 
+  group_by(word1, word2) %>% 
+  count() %>% 
+  arrange(desc(n)) %>% 
+  filter(n > 5) %>% 
+  graph_from_data_frame()
+
+fed_skip_bigram_graph %>% 
+  ggraph(layout = "fr") +
+  geom_edge_link() +
+  geom_node_point() +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  ggtitle("Hamilton:  Skip Bigrams")
+```
+
+Very messy, and we can't read it, but that is okay for now. Later this kind of graph will be compared with other similar graphs, so we dont have to be able to read it. However, the method I am planning to use, graph kernels, often require that a graph is connected. So I just want the largest connected portion! This takes some extra work, but we can make it happen.
+
+```{r cliques}
+# How many vertcies?
+fed_skip_bigram_graph %>% 
+igraph::vertex.attributes()
+
+# ID Clusters
+fed_ham_clusters <- fed_skip_bigram_graph %>% 
+  igraph::clusters()
+fed_ham_clusters <- fed_ham_clusters$membership %>% 
+  as.data.frame()
+ 
+fed_ham_clusters$word <- rownames(fed_ham_clusters)
+colnames(fed_ham_clusters) <- c("member","word")
+
+reduced_clusters <- fed_ham_clusters %>% 
+  filter(member != 1)
+
+parchment <- png::readPNG("../images/parchment.png")
+
+fed_skip_bigram_graph %>% 
+  as_edgelist() %>% 
+  as.data.frame() %>% 
+  anti_join(y = reduced_clusters, by = c("V1" = "word")) %>% 
+  anti_join(y = reduced_clusters, by = c("V2" = "word")) %>% 
+  graph_from_data_frame() %>% 
+  ggraph(layout = "fr") +
+  annotation_custom(rasterGrob(parchment, 
+                               width = unit(1,"npc"), 
+                               height = unit(1,"npc")), 
+                    -Inf, Inf, -Inf, Inf) +
+  geom_edge_link() +
+  geom_node_point() +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  ggtitle("Hamilton: Skip Bigrams")
+```
+
+This is exeactly the kind of graph I need to be able to produce for my thesis. This fun example was a good way to practice cutting the extra off of the graph, in preparation for the graph kernel methods. The next step would be to make these style graphs for Madison and Jay. Alternatively, they could be made for each essay. Then graph kernels will be applied and a measure of similarity between the graphs will be produced.
+
+# Conclusions
+
+Using text analysis, the Federalist papers can be a lot of fun to work on. There are a lot of fun tasks here: seperate text by author, seperate text by essay, who wrote _Non-Stop_, and who got sick after writing 5? In this project I specifically wanted to practice some `{ggplot2}` skills. Among those skills were: `{ggannotate}`, background images, and theme elements. Additionally, I wanted to do some text analysis to practice and learn how to prepare my graphs for the analysis I want to complete for me thesis work. 
