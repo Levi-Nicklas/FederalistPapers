@@ -4,6 +4,8 @@
 
 ## Mini Project 1: Federalist Papers
 
+![](images/the-federalist-papers.jpg)
+
 Since I have been listening to the Hamilton soundtrack most of this week, I decided the [Federalist Papers](https://en.wikipedia.org/wiki/The_Federalist_Papers) would be a 
 good test subject for some practice text mining that will go hand in hand with my thesis topic. Luckily, thanks to [Project Gutenberg](https://www.gutenberg.org/) (`{gutenbergr}`), we can download the text of these important documetns for free.
 
