@@ -13,4 +13,4 @@ For this mini-project, my personal goals are:
 - [x] Use some _fancy_ `{ggplot2}` peripherals and features (images, annotations, etc)
 - [x] Figure out some concepts related to my thesis work.
 
-These dataset would also be useful for a tet mining or ML course :wink:, since there is the potential to classify text by author or essay, to assess the topics of essays, to look at summary statistics for text, etc.
+These dataset would also be useful for a text mining or ML course :wink:, since there is the potential to classify text by author or essay, to assess the topics of essays, to look at summary statistics for text, etc.
